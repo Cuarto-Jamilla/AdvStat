@@ -1,64 +1,198 @@
-'use client';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-type User = { name: string; email: string };
+'use client';
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
+
+type User = {
+  id?: string;
+  name: string;
+  email: string;
+};
+
 type Theme = 'light' | 'dark';
+
 interface Ctx {
-  user: User | null; ready: boolean; theme: Theme; toggleTheme: () => void;
+  user: User | null;
+  ready: boolean;
+  theme: Theme;
+  toggleTheme: () => void;
   login: (email: string, pw: string) => Promise<string | null>;
   register: (name: string, email: string, pw: string) => Promise<string | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
+
 const C = createContext<Ctx>(null as unknown as Ctx);
+
 export const useApp = () => useContext(C);
 
-async function hash(s: string) {
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
-}
-type Stored = { name: string; email: string; pw: string };
-const users = (): Stored[] => { try { return JSON.parse(localStorage.getItem('advstat_users') || '[]'); } catch { return []; } };
-
-export default function Providers({ children }: { children: ReactNode }) {
+export default function Providers({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState<Theme>('light');
 
+  // Check existing login session
   useEffect(() => {
-    try {
-      const t = (localStorage.getItem('advstat_theme') as Theme) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      setTheme(t);
-      const s = localStorage.getItem('advstat_session');
-      if (s) setUser(JSON.parse(s));
-    } catch {}
-    setReady(true);
+    let active = true;
+
+    async function initialize() {
+      try {
+        const savedTheme = localStorage.getItem('advstat_theme');
+
+        const initialTheme: Theme =
+          savedTheme === 'light' || savedTheme === 'dark'
+            ? savedTheme
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+
+        if (active) setTheme(initialTheme);
+
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (active && data.success && data.user) {
+            setUser(data.user);
+          }
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+      } finally {
+        if (active) setReady(true);
+      }
+    }
+
+    initialize();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
+  // Save theme preference
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('advstat_theme', theme); } catch {}
+
+    try {
+      localStorage.setItem('advstat_theme', theme);
+    } catch {}
   }, [theme]);
 
-  const start = (u: User) => { setUser(u); localStorage.setItem('advstat_session', JSON.stringify(u)); };
+  // Register using Neon database
+  const register = async (
+    name: string,
+    email: string,
+    pw: string
+  ): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name,
+          email,
+          password: pw,
+        }),
+      });
 
-  const register = async (name: string, email: string, pw: string) => {
-    email = email.trim().toLowerCase();
-    if (!name.trim() || !email.includes('@') || pw.length < 6) return 'Enter a name, a valid email and a password of 6+ characters.';
-    const all = users();
-    if (all.some((u) => u.email === email)) return 'That email is already registered. Try signing in.';
-    all.push({ name: name.trim(), email, pw: await hash(pw) });
-    localStorage.setItem('advstat_users', JSON.stringify(all));
-    start({ name: name.trim(), email });
-    return null;
-  };
-  const login = async (email: string, pw: string) => {
-    email = email.trim().toLowerCase();
-    const u = users().find((x) => x.email === email);
-    if (!u || u.pw !== (await hash(pw))) return 'Incorrect email or password.';
-    start({ name: u.name, email });
-    return null;
-  };
-  const logout = () => { setUser(null); localStorage.removeItem('advstat_session'); };
+      const data = await response.json();
 
-  return <C.Provider value={{ user, ready, theme, toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'), login, register, logout }}>{children}</C.Provider>;
+      if (!response.ok || !data.success) {
+        return data.message || 'Registration failed.';
+      }
+
+      // Automatically log in after successful registration
+      return await login(email, pw);
+    } catch (error) {
+      console.error('Registration request failed:', error);
+      return 'Unable to connect to the server. Please try again.';
+    }
+  };
+
+  // Login using Neon database
+  const login = async (
+    email: string,
+    pw: string
+  ): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          password: pw,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        return data.message || 'Incorrect email or password.';
+      }
+
+      setUser(data.user);
+      return null;
+    } catch (error) {
+      console.error('Login request failed:', error);
+      return 'Unable to connect to the server. Please try again.';
+    }
+  };
+
+  // Logout and clear server session
+  const logout = async (): Promise<void> => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    } finally {
+      setUser(null);
+    }
+  };
+
+  // Toggle light and dark theme
+  const toggleTheme = () => {
+    setTheme((current) =>
+      current === 'dark' ? 'light' : 'dark'
+    );
+  };
+
+  return (
+    <C.Provider
+      value={{
+        user,
+        ready,
+        theme,
+        toggleTheme,
+        login,
+        register,
+        logout,
+      }}
+    >
+      {children}
+    </C.Provider>
+  );
 }
