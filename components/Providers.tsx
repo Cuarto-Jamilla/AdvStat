@@ -13,6 +13,7 @@ type User = {
   id?: string;
   name: string;
   email: string;
+  profilePicture?: string | null;
 };
 
 type Theme = 'light' | 'dark';
@@ -22,9 +23,10 @@ interface Ctx {
   ready: boolean;
   theme: Theme;
   toggleTheme: () => void;
-  login: (email: string, pw: string) => Promise<string | null>;
+  login: (email: string, pw: string, remember?: boolean) => Promise<string | null>;
   register: (name: string, email: string, pw: string) => Promise<string | null>;
   logout: () => Promise<void>;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const C = createContext<Ctx>(null as unknown as Ctx);
@@ -38,7 +40,7 @@ export default function Providers({
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<Theme>('dark');
 
   // Check existing login session
   useEffect(() => {
@@ -51,9 +53,7 @@ export default function Providers({
         const initialTheme: Theme =
           savedTheme === 'light' || savedTheme === 'dark'
             ? savedTheme
-            : window.matchMedia('(prefers-color-scheme: dark)').matches
-              ? 'dark'
-              : 'light';
+            : 'dark';
 
         if (active) setTheme(initialTheme);
 
@@ -130,7 +130,8 @@ export default function Providers({
   // Login using Neon database
   const login = async (
     email: string,
-    pw: string
+    pw: string,
+    remember = true
   ): Promise<string | null> => {
     try {
       const response = await fetch('/api/auth/login', {
@@ -142,6 +143,7 @@ export default function Providers({
         body: JSON.stringify({
           email,
           password: pw,
+          remember,
         }),
       });
 
@@ -190,6 +192,7 @@ export default function Providers({
         login,
         register,
         logout,
+        updateUser: (updates) => setUser((current) => current ? { ...current, ...updates } : current),
       }}
     >
       {children}

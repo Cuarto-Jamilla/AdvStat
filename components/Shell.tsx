@@ -1,15 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useApp } from './Providers';
-import { Logo, IconHome, IconRegression, IconHypo, IconBook, IconSun, IconMoon, IconLogout, IconUser } from './Icons';
+import { Logo, IconHome, IconRegression, IconHypo, IconHistory, IconBookmark, IconInfo, IconSun, IconMoon, IconLogout, IconUser, IconBook } from './Icons';
 
 const NAV = [
-  { href: '/dashboard', label: 'Home', Icon: IconHome },
-  { href: '/regression', label: 'Regression Lab', Icon: IconRegression },
-  { href: '/hypothesis', label: 'Hypothesis Arena', Icon: IconHypo },
-  { href: '/guide', label: 'User Manual', Icon: IconBook },
+  { href: '/dashboard', label: 'Dashboard', Icon: IconHome },
+  { href: '/regression', label: 'Linear Regression', Icon: IconRegression },
+  { href: '/hypothesis', label: 'Hypothesis Testing', Icon: IconHypo },
+  { href: '/history', label: 'History', Icon: IconHistory },
+  { href: '/saved', label: 'Saved Results', Icon: IconBookmark },
+  { href: '/account', label: 'Account', Icon: IconUser },
+  { href: '/review', label: 'Review Topics', Icon: IconBook },
+  { href: '/guide', label: 'About', Icon: IconInfo },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -17,19 +21,19 @@ export default function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   useEffect(() => { if (ready && !user) router.replace('/login'); }, [ready, user, router]);
-  if (!ready || !user) return <div className="splash"><Logo size={64} /></div>;
+  if (!ready || !user) return null;
   return (
     <div className="shell">
       <aside className="side">
-        <div className="brand"><Logo size={38} /><div><b>ADVSTAT</b><small>Studio</small></div></div>
+        <Link href="/dashboard" className="brand"><Logo size={38} /><div><b>ADVSTAT</b><small>Studio</small></div></Link>
         <nav>
           {NAV.map(({ href, label, Icon }) => (
             <Link key={href} href={href} className={path === href ? 'nav on' : 'nav'}><Icon /><span>{label}</span></Link>
           ))}
         </nav>
         <div className="side-foot">
-          <div className="me"><IconUser /><span>{user.name}</span></div>
-          <button className="ghost" onClick={toggleTheme}>{theme === 'dark' ? <IconSun /> : <IconMoon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
+          <Link className="me account-shortcut" href="/account">{user.profilePicture ? <img src={user.profilePicture} alt="" /> : <IconUser />}<span>{user.name}</span></Link>
+          <button className="ghost theme-toggle" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>{theme === 'dark' ? <IconSun /> : <IconMoon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
           <button className="ghost" onClick={() => { logout(); router.replace('/login'); }}><IconLogout /><span>Log out</span></button>
         </div>
       </aside>

@@ -23,3 +23,7 @@ export const IconMoon = (p: P) => <Svg {...p}><path d="M20 14.5A8 8 0 019.5 4 8 
 export const IconLogout = (p: P) => <Svg {...p}><path d="M10 4H5v16h5" /><path d="M14 8l4 4-4 4M18 12H9" /></Svg>;
 export const IconUser = (p: P) => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" /></Svg>;
 export const IconSpark = (p: P) => <Svg {...p}><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" /></Svg>;
+export const IconHistory = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /><path d="M3 4v4h4" /></Svg>;
+export const IconBookmark = (p: P) => <Svg {...p}><path d="M6 4h12v17l-6-4-6 4z" /></Svg>;
+export const IconInfo = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></Svg>;
+export const IconCheck = (p: P) => <Svg {...p}><path d="M5 12l4 4L19 6" /></Svg>;

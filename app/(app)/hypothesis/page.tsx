@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { Bell } from '@/components/Charts';
 import { critMag, zTest, type Tail } from '@/lib/stats';
-import { bumpRun } from '@/lib/store';
-import { IconHypo } from '@/components/Icons';
+import { recordAnalysis, setRecordSaved } from '@/lib/store';
+import { IconBookmark, IconCheck, IconHypo } from '@/components/Icons';
 
 const ALPHAS = [0.1, 0.05, 0.025, 0.01, 0.005, 0.001];
 type Out = ReturnType<typeof zTest> & { tail: Tail; alpha: number };
@@ -16,20 +16,53 @@ export default function Hypothesis() {
   const [mu0, setMu0] = useState('100'); const [xbar, setXbar] = useState('104.5');
   const [sigma, setSigma] = useState('12'); const [n, setN] = useState('40');
   const [err, setErr] = useState(''); const [out, setOut] = useState<Out | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [recordId, setRecordId] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [recordError, setRecordError] = useState('');
 
-  const run = () => {
+  const run = async () => {
+    setOut(null); setRecordId(''); setSaved(false); setRecordError(''); setErr('');
     const v = [mu0, xbar, sigma, n].map(Number);
-    if ([mu0, xbar, sigma, n].some((s) => s.trim() === '') || v.some((x) => !isFinite(x))) return setErr('Fill in all numeric fields.');
+    if ([mu0, xbar, sigma, n].some((value) => value.trim() === '') || v.some((value) => !isFinite(value))) return setErr('Fill in all numeric fields.');
     if (v[2] <= 0 || v[3] < 1) return setErr('σ must be positive and n at least 1.');
-    setErr(''); setOut({ ...zTest(v[1], v[0], v[2], v[3], alpha, tail), tail, alpha });
-    bumpRun('hypothesis');
+    const result = { ...zTest(v[1], v[0], v[2], v[3], alpha, tail), tail, alpha };
+    setOut(result);
+    setRecording(true);
+    try {
+      const decision = result.reject ? 'Reject' : 'Fail to reject';
+      const record = await recordAnalysis({
+        kind: 'hypothesis',
+        title: 'One-sample Z-test',
+        summary: `z = ${result.z.toFixed(4)}, p = ${result.p.toFixed(4)}, α = ${result.alpha}; ${decision} H₀`,
+        details: { nullHypothesis: h0, alternativeHypothesis: h1, tail, alpha, hypothesizedMean: v[0], sampleMean: v[1], populationSigma: v[2], sampleSize: v[3], standardError: result.se, z: result.z, criticalZ: result.zc, pValue: result.p, rejectNull: result.reject },
+      });
+      setRecordId(record.id);
+    } catch (reason) {
+      setRecordError(reason instanceof Error ? reason.message : 'This result could not be added to History.');
+    } finally {
+      setRecording(false);
+    }
+  };
+  const save = async () => {
+    if (!recordId) return;
+    setSaving(true); setRecordError('');
+    try {
+      await setRecordSaved(recordId, true);
+      setSaved(true);
+    } catch (reason) {
+      setRecordError(reason instanceof Error ? reason.message : 'This result could not be saved.');
+    } finally {
+      setSaving(false);
+    }
   };
   const pick = (t: Tail) => { setTail(t); };
   const sym = tail === 'two' ? '≠' : tail === 'right' ? '>' : '<';
 
   return (
     <div className="page">
-      <h1 className="title"><span className="bigicon b sm"><IconHypo /></span>Hypothesis Arena</h1>
+      <h1 className="title"><span className="bigicon b sm"><IconHypo /></span>Hypothesis Testing Lab</h1>
       <p className="muted">One-sample Z-test for a mean (population σ known).</p>
       <div className="grid2 top">
         <div className="card">
@@ -64,6 +97,7 @@ export default function Hypothesis() {
         <>
           <div className="card">
             <h3>3 · Computation</h3>
+            <div className="result-status" role="status" aria-live="polite"><IconCheck size={18} /><span>Test complete</span><small>{recording ? 'Recording in History…' : 'Your results are ready below.'}</small></div>
             <div className="eq">z = (x̄ − μ₀) / (σ/√n) = ({xbar} − {mu0}) / ({sigma}/√{n}) = {out.z.toFixed(4)}</div>
             <div className="stats">
               <div><small>Std. error</small><b>{out.se.toFixed(4)}</b></div>
@@ -71,6 +105,8 @@ export default function Hypothesis() {
               <div><small>Critical z</small><b>{out.tail === 'two' ? '±' : out.tail === 'left' ? '−' : ''}{out.zc.toFixed(3)}</b></div>
               <div><small>p-value</small><b>{out.p < 0.0001 ? '< 0.0001' : out.p.toFixed(4)}</b></div>
             </div>
+              <button className="ghost solid save-button" onClick={save} disabled={saved || !recordId || saving}><IconBookmark size={18} />{saved ? 'Saved to results' : saving ? 'Saving…' : recording ? 'Recording…' : 'Save result'}</button>
+            {recordError && <div className="error" role="alert">{recordError}</div>}
             <div className={`verdict ${out.reject ? 'rej' : 'acc'}`}>
               <b>{out.reject ? 'Reject H₀' : 'Fail to reject H₀'}</b>
               <span>{out.reject ? `The computed z falls in the rejection region (p ≤ α = ${out.alpha}). There is sufficient evidence for H₁: ${h1}.` : `The computed z falls in the acceptance region (p > α = ${out.alpha}). There is not enough evidence for H₁: ${h1}.`}</span>

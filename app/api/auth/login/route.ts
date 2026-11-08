@@ -1,4 +1,5 @@
 import { getSql } from '@/lib/db';
+import { getProfilesSql } from '@/lib/records';
 import { compare } from 'bcryptjs';
 import { SignJWT } from 'jose';
 
@@ -7,6 +8,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
+    const remember = body.remember !== false;
 
     if (!email || !password) {
       return Response.json(
@@ -37,6 +39,15 @@ export async function POST(request: Request) {
       );
     }
 
+    let profilePicture: string | null = null;
+    try {
+      const profileSql = await getProfilesSql();
+      const profiles = await profileSql`SELECT profile_picture FROM user_profiles WHERE user_id = ${String(account.id)} LIMIT 1`;
+      profilePicture = profiles[0]?.profile_picture || null;
+    } catch (error) {
+      console.error('Profile lookup failed:', error);
+    }
+
     const token = await new SignJWT({
       userId: account.id,
       email: account.email,
@@ -54,12 +65,13 @@ export async function POST(request: Request) {
         id: account.id,
         name: account.name,
         email: account.email,
+        profilePicture,
       },
     });
 
     response.headers.append(
       'Set-Cookie',
-      `advstat_session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+      `advstat_session=${token}; HttpOnly; Path=/; SameSite=Lax${remember ? '; Max-Age=604800' : ''}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
     );
 
     return response;
